@@ -1,28 +1,33 @@
-annotated-types==0.6.0
-anyio==4.12.1
-Brotli==1.2.0
-certifi==2026.2.25
-charset-normalizer==3.4.4
-colorama==0.4.6
-distro==1.9.0
-exceptiongroup==1.3.1
-h11==0.16.0
-h2==4.3.0
-hpack==4.1.0
-httpcore==1.0.9
-httpx==0.28.1
-hyperframe==6.1.0
-idna==3.11
-jiter==0.12.0
-openai==2.14.0
-pip==26.0.1
-pydantic==2.12.4
-pydantic_core==2.41.5
-PySocks==1.7.1
-requests==2.32.5
-sniffio==1.3.1
-tqdm==4.67.3
-typing_extensions==4.15.0
-typing-inspection==0.4.2
-urllib3==2.6.3
-win_inet_pton==1.1.0
+annotated-doc==0.0.4
+annotated-types @ file:///C:/miniconda3/conda-bld/annotated-types_1761745026115/work
+anyio @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_anyio_1767719033/work
+Brotli @ file:///D:/bld/brotli-split_1764017006836/work
+certifi @ file:///home/conda/feedstock_root/build_artifacts/certifi_1772001073725/work/certifi
+charset-normalizer @ file:///home/conda/feedstock_root/build_artifacts/charset-normalizer_1760437218288/work
+click==8.3.1
+colorama @ file:///C:/Users/dev-admin/buildout/croot/colorama_1759952627215/work
+distro @ file:///C:/Users/dev-admin/buildout/croot/distro_1759969922852/work
+exceptiongroup @ file:///home/conda/feedstock_root/build_artifacts/exceptiongroup_1763918002538/work
+fastapi==0.135.1
+h11 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_h11_1767729720/work
+h2 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_h2_1756364871/work
+hpack @ file:///home/conda/feedstock_root/build_artifacts/hpack_1737618293087/work
+httpcore @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_httpcore_1745602916/work
+httpx @ file:///home/conda/feedstock_root/build_artifacts/httpx_1733663348460/work
+hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_1737618333194/work
+idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1760286409563/work
+jiter @ file:///C:/miniconda3/conda-bld/jiter_1762897337474/work
+openai @ file:///C:/Users/task_176716792266699/croot/openai_1767168042251/work
+pydantic @ file:///C:/miniconda3/conda-bld/pydantic_1764083727998/work
+pydantic_core @ file:///C:/miniconda3/conda-bld/pydantic-core_1764009797134/work
+PySocks @ file:///D:/bld/pysocks_1733217287171/work
+python-dotenv==1.2.2
+requests @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_requests_1766926974/work
+sniffio @ file:///home/conda/feedstock_root/build_artifacts/sniffio_1762941432086/work
+starlette==0.52.1
+tqdm @ file:///C:/Users/task_177139866619957/croot/tqdm_1771398766117/work
+typing-inspection @ file:///C:/Users/dev-admin/buildout/croot/typing-inspection_1761942581967/work
+typing_extensions @ file:///C:/Users/dev-admin/buildout/croot/typing_extensions_1759955056205/work
+urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1767817748113/work
+uvicorn==0.41.0
+win_inet_pton @ file:///D:/bld/win_inet_pton_1733130564612/work

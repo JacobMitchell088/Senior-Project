@@ -51,4 +51,11 @@ dependencies:
   - vcomp14=14.44.35208=h818238b_34
   - win_inet_pton=1.1.0=pyh7428d3b_8
   - zstd=1.5.7=h534d264_6
+  - pip:
+      - annotated-doc==0.0.4
+      - click==8.3.1
+      - fastapi==0.135.1
+      - python-dotenv==1.2.2
+      - starlette==0.52.1
+      - uvicorn==0.41.0
 prefix: C:\Users\jacob\miniconda3\envs\GBIF_env
