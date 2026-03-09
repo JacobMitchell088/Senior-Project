@@ -1,33 +1,6 @@
-annotated-doc==0.0.4
-annotated-types @ file:///C:/miniconda3/conda-bld/annotated-types_1761745026115/work
-anyio @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_anyio_1767719033/work
-Brotli @ file:///D:/bld/brotli-split_1764017006836/work
-certifi @ file:///home/conda/feedstock_root/build_artifacts/certifi_1772001073725/work/certifi
-charset-normalizer @ file:///home/conda/feedstock_root/build_artifacts/charset-normalizer_1760437218288/work
-click==8.3.1
-colorama @ file:///C:/Users/dev-admin/buildout/croot/colorama_1759952627215/work
-distro @ file:///C:/Users/dev-admin/buildout/croot/distro_1759969922852/work
-exceptiongroup @ file:///home/conda/feedstock_root/build_artifacts/exceptiongroup_1763918002538/work
 fastapi==0.135.1
-h11 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_h11_1767729720/work
-h2 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_h2_1756364871/work
-hpack @ file:///home/conda/feedstock_root/build_artifacts/hpack_1737618293087/work
-httpcore @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_httpcore_1745602916/work
-httpx @ file:///home/conda/feedstock_root/build_artifacts/httpx_1733663348460/work
-hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_1737618333194/work
-idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1760286409563/work
-jiter @ file:///C:/miniconda3/conda-bld/jiter_1762897337474/work
-openai @ file:///C:/Users/task_176716792266699/croot/openai_1767168042251/work
-pydantic @ file:///C:/miniconda3/conda-bld/pydantic_1764083727998/work
-pydantic_core @ file:///C:/miniconda3/conda-bld/pydantic-core_1764009797134/work
-PySocks @ file:///D:/bld/pysocks_1733217287171/work
-python-dotenv==1.2.2
-requests @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_requests_1766926974/work
-sniffio @ file:///home/conda/feedstock_root/build_artifacts/sniffio_1762941432086/work
-starlette==0.52.1
-tqdm @ file:///C:/Users/task_177139866619957/croot/tqdm_1771398766117/work
-typing-inspection @ file:///C:/Users/dev-admin/buildout/croot/typing-inspection_1761942581967/work
-typing_extensions @ file:///C:/Users/dev-admin/buildout/croot/typing_extensions_1759955056205/work
-urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1767817748113/work
 uvicorn==0.41.0
-win_inet_pton @ file:///D:/bld/win_inet_pton_1733130564612/work
+requests==2.32.5
+openai==1.109.1
+pydantic==2.12.0
+python-dotenv==1.2.2
