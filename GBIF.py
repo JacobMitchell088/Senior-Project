@@ -12,97 +12,100 @@ if "OPENAI_API_KEY" not in os.environ:
     raise RuntimeError("OPENAI_API_KEY environment variable not set. Please rerun after setting your key.")
 
 
-GBIF_MATCH = "https://api.gbif.org/v1/species/match"
 GBIF_OCC_SEARCH = "https://api.gbif.org/v1/occurrence/search"
-MAX_SPECIES = int(os.getenv("MAX_SPECIES_FOR_AI", 10)) # Highest amount of species that can be sent to our openAI call
+MAX_SPECIES = int(os.getenv("MAX_SPECIES_FOR_AI", 3)) # Highest amount of species that can be sent to our openAI call
 
 def miles_to_km(mi: float) -> float:
     return mi * 1.609344
 
-def bounding_box_polygon(lat: float, lon: float, radius_km: float) -> str:
+# Bounding box over polygon for simplicity - Change to polygon later on for more specificity
+def get_bounding_box(lat: float, lon: float, radius_miles: float):
+    radius_km = miles_to_km(radius_miles)
+
     lat_delta = radius_km / 111.0
     lon_delta = radius_km / (111.0 * math.cos(math.radians(lat)) + 1e-12)
-    min_lat, max_lat = lat - lat_delta, lat + lat_delta
-    min_lon, max_lon = lon - lon_delta, lon + lon_delta
-    return (
-        f"POLYGON(({min_lon} {min_lat},"
-        f"{min_lon} {max_lat},"
-        f"{max_lon} {max_lat},"
-        f"{max_lon} {min_lat},"
-        f"{min_lon} {min_lat}))"
-    )
 
-def load_il_scientific_names(path: str) -> list[str]:
-    names = set()
+    min_lat = lat - lat_delta
+    max_lat = lat + lat_delta
+    min_lon = lon - lon_delta
+    max_lon = lon + lon_delta
+
+    print(f"Bounding box = [min_lat: {min_lat}, max_lat: {max_lat}, min_lon: {min_lon}, max_lon: {max_lon}]")
+
+    return min_lat, max_lat, min_lon, max_lon
+
+def load_precomputed_taxon_keys(path: str) -> dict[str, int]:
+    """
+    Reads IllinoisTaxonLookup.csv and returns:
+
+        {
+            "Myotis sodalis": 2435099,
+            "Pandion haliaetus": 2480506,
+            ...
+        }
+    """
+
+    name_to_key = {}
+    key_to_name = {}
+
     with open(path, newline="", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            nm = (row.get("Scientific Name") or "").strip()
-            if nm:
-                # keep binomial only (Genus species)
-                parts = nm.split()
-                if len(parts) >= 2:
-                    names.add(f"{parts[0]} {parts[1]}")
-                else:
-                    names.add(nm)
-    return sorted(names)
+        reader = csv.DictReader(f)
 
-def gbif_match_to_taxonkey(name: str) -> int | None:
-    # /species/match is the intended GBIF endpoint for name→backbone key mapping
-    j = requests.get(GBIF_MATCH, params={"name": name}, timeout=20).json()
-    key = j.get("usageKey") or j.get("speciesKey")
-    return int(key) if key else None
+        for row in reader:
+            name = (row.get("Scientific Name") or "").strip()
+            key = (row.get("Taxon Key") or "").strip()
 
-def gbif_count_occurrences(geometry_wkt: str, taxon_key: int) -> int:
+            if name and key:
+                try:
+                    name_to_key[name] = int(key)
+                    key_to_name[int(key)] = name 
+                except ValueError:
+                    pass
+
+    return name_to_key, key_to_name
+
+def gbif_species_counts_in_area(lat: float, lon: float, radius_miles: float) -> list[tuple[int, int]]: # Do facet search to get ALL species keys in an area, then later cross section w/ precomputed list of IL endangered species keys
+    min_lat, max_lat, min_lon, max_lon = get_bounding_box(lat, lon, radius_miles)
+    
     params = {
-        "geometry": geometry_wkt,
-        "taxonKey": taxon_key,
+        "decimalLatitude": f"{min_lat},{max_lat}",
+        "decimalLongitude": f"{min_lon},{max_lon}",
         "hasCoordinate": "true",
-        "year": "2020,2025", # range
-        "limit": 0,  # we only need the total "count"
+        "year": "2025,2026",
+        "facet": "speciesKey",
+        "facetMincount": 1,
+        "speciesKey.facetLimit": 1000,
+        "limit": 0
     }
-    j = requests.get(GBIF_OCC_SEARCH, params=params, timeout=30).json()
-    return int(j.get("count", 0))
+
+    j = requests.get(GBIF_OCC_SEARCH, params=params, timeout=45).json()
+
+    counts = j.get("facets", [])[0].get("counts", [])
+    return [(int(row["name"]), int(row["count"])) for row in counts if row.get("name")]
 
 def main():
     # Example location
     # TODO:
-    lat, lon = 41.8781, -87.6298
-    radius_miles = 7
-    radius_km = miles_to_km(radius_miles)
-    geom = bounding_box_polygon(lat, lon, radius_km)
+    lat, lon = 38.617110, -90.207191
+    radius_miles = 5
 
-    il_names = load_il_scientific_names("IsEndangered.csv")
-    print(f"Loaded {len(il_names)} unique IL-listed scientific names")
+    #geom = bounding_box_polygon(lat, lon, radius_km)
 
-    # 1) Map IL names -> GBIF taxonKeys (parallel w/ workers)
-    name_to_key = {}
-    with ThreadPoolExecutor(max_workers=20) as ex:
-        futures = {ex.submit(gbif_match_to_taxonkey, nm): nm for nm in il_names}
-        for fut in as_completed(futures):
-            nm = futures[fut]
-            try:
-                key = fut.result()
-                if key:
-                    name_to_key[nm] = key
-            except Exception:
-                pass
+    # 1) Load IL endangered species scientific names / taxon IDS (precomputed for speed)
+    name_to_key, key_to_name = load_precomputed_taxon_keys("IllinoisTaxonLookup.csv")
+    print(f"Loaded Illinois Taxon Keys: {len(name_to_key)} species")
 
-    print(f"Matched {len(name_to_key)} names to GBIF backbone keys")
+    # 2) GBIF Query to get species counts in area - ONE CALL to get ALL species keys + counts in area (instead of iterating through each species and making separate calls)
+    area_species = gbif_species_counts_in_area(lat, lon, radius_miles)
+    print(f"GBIF species keys in area: {len(area_species)}")
 
-    # 2) Count occurrences for each taxonKey in the geometry (parallel w/ workers)
+    # 3) Cross reference GBIF species keys with IL endangered species keys to get final hits with counts and names (intersect locally)
     hits = []
-    with ThreadPoolExecutor(max_workers=20) as ex:
-        futures = {ex.submit(gbif_count_occurrences, geom, key): (nm, key)
-                   for nm, key in name_to_key.items()}
-        for fut in as_completed(futures):
-            nm, key = futures[fut]
-            try:
-                cnt = fut.result()
-                if cnt > 0:
-                    hits.append((nm, cnt, key))
-            except Exception:
-                pass
+    
+    for taxon_key, count in area_species:
+        if taxon_key in key_to_name:
+            name = key_to_name[taxon_key]
+            hits.append((name, count, taxon_key))
 
     hits.sort(key=lambda x: x[1], reverse=True)
 
@@ -128,8 +131,8 @@ def main():
             "lat": lat,
             "lon": lon,
             "radius_miles": radius_miles,
-            "year_start": 2020,
-            "year_end": 2025
+            "year_start": 2025,
+            "year_end": 2026
         },
         "hits": [
             {

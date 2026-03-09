@@ -1,16 +1,24 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
-# Import functions from GBIF module
 import GBIF
-
 from openai_species_context import enrich_gbif_results_with_openai_batch
 
 app = FastAPI(
     title="Environmental Screening API",
     description="Environmental screening for endangered species near construction sites",
     version="1.0"
+)
+
+# Allow frontend requests during development / deployment
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Request schema
@@ -27,61 +35,36 @@ def root():
 
 @app.post("/scan")
 def scan_site(req: ScanRequest):
-
     lat = req.lat
     lon = req.lon
     radius_miles = req.radius_miles
 
-    radius_km = GBIF.miles_to_km(radius_miles)
-    geom = GBIF.bounding_box_polygon(lat, lon, radius_km)
+    # 1) Load precomputed Illinois endangered lookup
+    name_to_key, key_to_name = GBIF.load_precomputed_taxon_keys("IllinoisTaxonLookup.csv")
 
-    il_names = GBIF.load_il_scientific_names("IsEndangered.csv")
+    # 2) ONE GBIF call for all species keys in the area
+    area_species = GBIF.gbif_species_counts_in_area(lat, lon, radius_miles)
 
-    # Map species name to taxon key
-    name_to_key = {}
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    with ThreadPoolExecutor(max_workers=20) as ex:
-        futures = {ex.submit(GBIF.gbif_match_to_taxonkey, nm): nm for nm in il_names}
-        for fut in as_completed(futures):
-            nm = futures[fut]
-            try:
-                key = fut.result()
-                if key:
-                    name_to_key[nm] = key
-            except Exception:
-                pass
-
+    # 3) Intersect locally with Illinois endangered species keys
     hits = []
-
-    with ThreadPoolExecutor(max_workers=20) as ex:
-        futures = {
-            ex.submit(GBIF.gbif_count_occurrences, geom, key): (nm, key)
-            for nm, key in name_to_key.items()
-        }
-
-        for fut in as_completed(futures):
-            nm, key = futures[fut]
-            try:
-                cnt = fut.result()
-                if cnt > 0:
-                    hits.append((nm, cnt, key))
-            except Exception:
-                pass
+    for taxon_key, count in area_species:
+        if taxon_key in key_to_name:
+            name = key_to_name[taxon_key]
+            hits.append((name, count, taxon_key))
 
     hits.sort(key=lambda x: x[1], reverse=True)
 
-    # Cap species count (same behavior as GBIF.py)
-    MAX_SPECIES = int(os.getenv("MAX_SPECIES_FOR_AI", 10))
-    hits = hits[:MAX_SPECIES]
+    # 4) Cap species count for OpenAI enrichment
+    max_species = int(os.getenv("MAX_SPECIES_FOR_AI", GBIF.MAX_SPECIES))
+    hits_for_ai = hits[:max_species]
 
     gbif_result = {
         "input": {
             "lat": lat,
             "lon": lon,
             "radius_miles": radius_miles,
-            "year_start": 2020,
-            "year_end": 2025
+            "year_start": 2025,
+            "year_end": 2026
         },
         "hits": [
             {
@@ -89,13 +72,22 @@ def scan_site(req: ScanRequest):
                 "gbif_count": cnt,
                 "taxon_key": key
             }
-            for nm, cnt, key in hits
+            for nm, cnt, key in hits_for_ai
         ]
     }
 
+    # 5) OpenAI enrichment
     enriched = enrich_gbif_results_with_openai_batch(gbif_result)
 
     return {
-        "gbif_hits": gbif_result["hits"],
+        "input": gbif_result["input"],
+        "gbif_hits": [
+            {
+                "scientific_name": nm,
+                "gbif_count": cnt,
+                "taxon_key": key
+            }
+            for nm, cnt, key in hits
+        ],
         "species_context": enriched["species_context"]
     }
