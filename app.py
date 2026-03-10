@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
@@ -23,9 +23,9 @@ app.add_middleware(
 
 # Request schema
 class ScanRequest(BaseModel):
-    lat: float
-    lon: float
-    radius_miles: float
+    lat: float = Field(..., ge=-90, le=90, description="Latitude of the construction site")
+    lon: float = Field(..., ge=-180, le=180, description="Longitude of the construction site")
+    radius_miles: float = Field(default=0, ge=0, le=100, description="Radius in miles")
 
 
 @app.get("/")

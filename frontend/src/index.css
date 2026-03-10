@@ -113,6 +113,15 @@ button {
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 10px 22px rgba(46, 125, 50, 0.18);
+
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.button:hover {
+  /* The glow effect using box-shadow */
+  box-shadow: 0 0 10px #4CAF50, /* Inner glow */
+              0 0 20px #4CAF50, /* Medium glow */
+              0 0 20px #4CAF50; /* Outer glow */
 }
 
 button:disabled {
@@ -318,7 +327,7 @@ button:disabled {
 
 .footer-logos {
   display: flex;
-  gap: 16px;
+  gap: 64px;
   align-items: center;
   margin-bottom: 12px;
 }

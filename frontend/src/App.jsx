@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import gbifLogo from "./assets/gbif-dot-org-green-logo.svg";
+import inhsLogo from "./assets/dnr-nav-logo.jpeg";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -28,6 +30,34 @@ export default function App() {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  const validateInputs = () => {
+  const lat = parseFloat(form.lat);
+  const lon = parseFloat(form.lon);
+
+  if (isNaN(lat) || isNaN(lon)) {
+    setError("Latitude and longitude must be numeric");
+    return false;
+  }
+
+  if (lat < -90 || lat > 90) {
+    setError("Latitude must be between -90 and 90");
+    return false;
+  }
+
+  if (lon < -180 || lon > 180) {
+    setError("Longitude must be between -180 and 180");
+    return false;
+  }
+
+  if (isNaN(parseFloat(form.radius_miles)) || parseFloat(form.radius_miles) < 0) {
+    setError("Radius must be a positive number");
+    return false;
+  }
+
+  return true;
+};
+
+
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
@@ -38,6 +68,10 @@ export default function App() {
     try {
       if (!backendUrl) {
         throw new Error("Missing VITE_API_BASE_URL. Add it to a .env file.");
+      }
+      if (!validateInputs()) {
+        setLoading(false);
+        return;
       }
 
       const response = await fetch(`${backendUrl}/scan`, {
@@ -112,7 +146,7 @@ export default function App() {
               />
             </label>
 
-            <button type="submit" disabled={loading}>
+            <button className="button" type="submit" disabled={loading}>
               {loading ? "Running Screen..." : "Run Environmental Screen"}
             </button>
           </form>
@@ -217,17 +251,17 @@ export default function App() {
         <p>
           Data sources:{" "}
           <a href="https://www.gbif.org" target="_blank" rel="noreferrer">
-            GBIF
-          </a>{" "}
-          and{" "}
+            <img src={gbifLogo} alt="GBIF Logo" className="footer-logo" />
+          </a>{"  "}
+          {" "}
           <a
             href="https://naturalheritage.illinois.gov/dataresearch/access-our-data.html"
             target="_blank"
             rel="noreferrer"
           >
-            Illinois Natural Heritage
+            <img src={inhsLogo} alt="Illinois Natural Heritage Logo" className="footer-logo" />
           </a>
-          .
+          
         </p>
 
         <p>
