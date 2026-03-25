@@ -14,7 +14,7 @@ from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 from limiter import limiter
 from scan import router as scan_router
-#from geocode import router as geocode_router
+from geocode import router as geocode_router
 
 load_dotenv()
 
@@ -64,5 +64,5 @@ def health():
 
 # Routers
 app.include_router(scan_router, tags=["scan"])
-#app.include_router(geocode_router, prefix="/geocode", tags=["geocode"])
+app.include_router(geocode_router, prefix="/geocode", tags=["geocode"])
 
