@@ -96,10 +96,21 @@ export default function ScreeningMap({
 
         <FlyToLocation lat={latNum} lon={lonNum} />
         <ZoomToRadius radiusMiles={radiusMiles} />
+        <MapClickHandler onPickLocation={onPickLocation} />
 
         {hasCoords && (
           <>
-            <Marker position={[latNum, lonNum]} />
+            <Marker 
+                position={[latNum, lonNum]}
+                draggable={true}
+                eventHandlers={{
+                dragend: (e) => {
+                const pos = e.target.getLatLng();
+                onPickLocation(pos.lat, pos.lng);
+                },
+              }}
+            />
+            
             {radiusMeters > 0 && (
               <Circle
                 center={[latNum, lonNum]}
