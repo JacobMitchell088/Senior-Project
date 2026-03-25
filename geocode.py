@@ -3,7 +3,8 @@ from urllib.parse import quote
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from limiter import limiter
 
 load_dotenv()
 
@@ -191,7 +192,9 @@ async def reverse_with_nominatim(lat: float, lon: float) -> dict:
 
 
 @router.get("/search")
+@limiter.limit("50/minute")
 async def geocode_search(
+    request: Request,
     q: str = Query(..., min_length=3, description="Address or place query"),
 ):
     try:
@@ -217,7 +220,9 @@ async def geocode_search(
 
 
 @router.get("/reverse")
+@limiter.limit("50/minute")
 async def reverse_geocode(
+    request: Request,
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
 ):

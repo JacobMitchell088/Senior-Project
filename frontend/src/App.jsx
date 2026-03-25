@@ -62,6 +62,7 @@ export default function App() {
   function updateField(event) {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    resetResults();
   }
 
   const validateInputs = () => {
@@ -155,7 +156,7 @@ async function handleAddressLookup() {
       lat: String(best.lat),
       lon: String(best.lon),
     }));
-
+    resetResults();
     // later:
     // update map center / marker here
   } catch (err) {
@@ -197,12 +198,25 @@ async function handleCoordinateLookup() {
       lat: String(best.lat),
       lon: String(best.lon),
     }));
+    resetResults();
 
     // later:
     // update map center / marker here
   } catch (err) {
     setError(err.message || "Coordinate lookup failed.");
   }
+}
+
+function resetResults() {
+  setError("");
+  setHasScanned(false);
+  setData({
+    gbif_hits: [],
+    species_context: [],
+  });
+  setJobId(null);
+  setProgress(0);
+  setStepText("");
 }
 
 
@@ -403,12 +417,40 @@ async function handleCoordinateLookup() {
               lat={Number(form.lat)}
               lon={Number(form.lon)}
               radiusMiles={Number(form.radius_miles)}
-              onPickLocation={(lat, lon) => {
+              onPickLocation={async (lat, lon) => {
+                resetResults();
+                // 1. update coordinates immediately (fast UI response)
                 setForm((prev) => ({
                   ...prev,
                   lat: lat.toFixed(6),
                   lon: lon.toFixed(6),
                 }));
+
+                try {
+                  // 2. call your backend reverse geocode
+                  const response = await fetch(
+                    `${backendUrl}/geocode/reverse?lat=${lat}&lon=${lon}`
+                  );
+
+                  if (!response.ok) return;
+
+                  const data = await response.json();
+
+                  if (!data.best_match) return;
+
+                  const best = data.best_match;
+
+                  // 3. update address AFTER lookup completes
+                  setForm((prev) => ({
+                    ...prev,
+                    lat: lat.toFixed(6),
+                    lon: lon.toFixed(6),
+                    address: best.label || prev.address,
+                  }));
+                } catch (err) {
+                  // silent fail to not disrupt ux
+                  console.error("Reverse geocode failed", err);
+                }
               }}
             />
           
