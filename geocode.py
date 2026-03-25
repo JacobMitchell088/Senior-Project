@@ -192,7 +192,7 @@ async def reverse_with_nominatim(lat: float, lon: float) -> dict:
 
 
 @router.get("/search")
-@limiter.limit("50/minute")
+@limiter.limit("5/minute")
 async def geocode_search(
     request: Request,
     q: str = Query(..., min_length=3, description="Address or place query"),
@@ -220,7 +220,7 @@ async def geocode_search(
 
 
 @router.get("/reverse")
-@limiter.limit("50/minute")
+@limiter.limit("5/minute")
 async def reverse_geocode(
     request: Request,
     lat: float = Query(..., ge=-90, le=90),
