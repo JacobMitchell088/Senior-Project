@@ -469,3 +469,16 @@ main {
   background: #43a047;
   transition: all 0.3s ease;
 }
+
+.map-shell {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.screening-map {
+  width: 100%;
+  height: 340px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #d9e3dc;
+}

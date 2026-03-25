@@ -1,4 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from "react";
+import "leaflet/dist/leaflet.css";
+import ScreeningMap from "./ScreeningMap";
 import gbifLogo from "./assets/gbif-dot-org-green-logo.svg";
 import inhsLogo from "./assets/dnr-nav-logo.jpeg";
 import ourLogo from "./assets/environment_screening_logo.png";
@@ -397,14 +399,19 @@ async function handleCoordinateLookup() {
           )}
 
           {!error && form.lat && form.lon && (
-          <iframe
-            width="100%"
-            height="300"
-            style={{ border: 0, borderRadius: "12px" }}
-            src={`https://www.openstreetmap.org/export/embed.html?bbox=${
-              form.lon - 0.05
-            },${form.lat - 0.05},${Number(form.lon) + 0.05},${Number(form.lat) + 0.05}&marker=${form.lat},${form.lon}`}
-          />
+            <ScreeningMap
+              lat={Number(form.lat)}
+              lon={Number(form.lon)}
+              radiusMiles={Number(form.radius_miles)}
+              onPickLocation={(lat, lon) => {
+                setForm((prev) => ({
+                  ...prev,
+                  lat: lat.toFixed(6),
+                  lon: lon.toFixed(6),
+                }));
+              }}
+            />
+          
           )}
 
           {loading && (
