@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-jobs = {}
 
 
 from dotenv import load_dotenv
@@ -21,7 +20,6 @@ load_dotenv()
 TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SECRET_KEY", "")
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 
-jobs = {}
 
 app = FastAPI(
     title="Environmental Screening API",
@@ -46,7 +44,11 @@ app.add_middleware(SlowAPIMiddleware)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return JSONResponse(
         status_code=429,
-        content={"detail": "Rate limit exceeded. Please try again later."}
+        content={
+            "error": "rate_limit_exceeded",
+            "message": "Too many requests. Please try again later.",
+            "retry_after": 3600,  # Suggest client to retry after 1 hr
+        },
     )
 
 @app.get("/")

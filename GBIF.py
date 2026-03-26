@@ -133,6 +133,7 @@ def run_scan(lat, lon, radius_miles, progress_callback=None):
         ]
     }
 
+    #if hits is not None and len(hits) > 0:
     enriched = enrich_gbif_results_with_openai_batch(gbif_result)
 
     if progress_callback:
