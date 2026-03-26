@@ -122,7 +122,7 @@ function pollScanStatus(scanJobId) {
       setError(err.message || "Polling failed.");
       setLoading(false);
     }
-  }, 1000);
+  }, 1000); // Poll every 1 second
 }
 
 async function handleAddressLookup() {

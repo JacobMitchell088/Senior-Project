@@ -8,6 +8,8 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+
+#from cachetools import TTLCache
 from limiter import limiter
 
 import GBIF
@@ -18,6 +20,8 @@ router = APIRouter()
 
 TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY", "")
 JOB_TTL_SECONDS = 360 # Time to live for jobs
+#SCAN_CACHE_TTL_SECONDS = 1800 # cache completed scan results for 30 min
+#SCAN_CACHE_MAXSIZE = 500
 
 jobs: dict[str, dict[str, Any]] = {}
 

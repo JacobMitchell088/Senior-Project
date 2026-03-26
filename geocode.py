@@ -1,10 +1,12 @@
 import os
+import threading
 from urllib.parse import quote
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Query, Request
 from limiter import limiter
+from cachetools import TTLCache
 
 load_dotenv()
 
@@ -13,6 +15,21 @@ router = APIRouter()
 GEOCODER_PROVIDER = os.getenv("GEOCODER_PROVIDER", "maptiler").lower()
 MAPTILER_API_KEY = os.getenv("MAPTILER_API_KEY", "")
 APP_USER_AGENT = os.getenv("APP_USER_AGENT", "environmental-screening-prototype/1.0")
+
+
+# Cache settings
+GEOCODE_CACHE_TTL_SECONDS = 86400   # 24 hours
+REVERSE_CACHE_TTL_SECONDS = 86400
+GEOCODE_CACHE_MAXSIZE = 1000
+REVERSE_CACHE_MAXSIZE = 1000
+
+# In memory TTL caches
+geocode_cache = TTLCache(maxsize=GEOCODE_CACHE_MAXSIZE, ttl=GEOCODE_CACHE_TTL_SECONDS)
+reverse_cache = TTLCache(maxsize=REVERSE_CACHE_MAXSIZE, ttl=REVERSE_CACHE_TTL_SECONDS)
+
+# cachetools caches are not thread safe by default, so guard access
+geocode_cache_lock = threading.Lock()
+reverse_cache_lock = threading.Lock()
 
 
 def normalize_result(label: str, lat: float, lon: float, bbox=None, raw=None):
@@ -24,6 +41,12 @@ def normalize_result(label: str, lat: float, lon: float, bbox=None, raw=None):
         "raw": raw,
     }
 
+def geocode_cache_key(query: str) -> str:
+    return query.strip().lower()
+
+def reverse_cache_key(lat: float, lon: float) -> tuple[float, float]:
+    # round a bit so tiny float differences don't miss cache
+    return (round(lat, 5), round(lon, 5))
 
 async def geocode_with_maptiler(query: str) -> dict:
     if not MAPTILER_API_KEY:
@@ -36,7 +59,7 @@ async def geocode_with_maptiler(query: str) -> dict:
         "limit": 5,
         "country": "us",
     }
-
+    print("[MAPTILER CALL]")
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
@@ -79,7 +102,7 @@ async def reverse_with_maptiler(lat: float, lon: float) -> dict:
         "key": MAPTILER_API_KEY,
         "limit": 1,
     }
-
+    print("[MAPTILER CALL]")
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
@@ -92,6 +115,7 @@ async def reverse_with_maptiler(lat: float, lon: float) -> dict:
             "count": 0,
             "best_match": None,
             "results": [],
+            "cached": False,
         }
 
     feature = features[0]
@@ -110,6 +134,7 @@ async def reverse_with_maptiler(lat: float, lon: float) -> dict:
         "count": 1,
         "best_match": result,
         "results": [result],
+        "cached": False,
     }
 
 
@@ -124,7 +149,7 @@ async def geocode_with_nominatim(query: str) -> dict:
     headers = {
         "User-Agent": APP_USER_AGENT,
     }
-
+    print("[NOMINATIM CALL]")
     async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
@@ -148,6 +173,7 @@ async def geocode_with_nominatim(query: str) -> dict:
         "count": len(results),
         "best_match": results[0] if results else None,
         "results": results,
+        "cached": False,
     }
 
 
@@ -161,7 +187,7 @@ async def reverse_with_nominatim(lat: float, lon: float) -> dict:
     headers = {
         "User-Agent": APP_USER_AGENT,
     }
-
+    print("[NOMINATIM CALL]")
     async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
@@ -173,6 +199,7 @@ async def reverse_with_nominatim(lat: float, lon: float) -> dict:
             "count": 0,
             "best_match": None,
             "results": [],
+            "cached": False,
         }
 
     result = normalize_result(
@@ -188,6 +215,7 @@ async def reverse_with_nominatim(lat: float, lon: float) -> dict:
         "count": 1,
         "best_match": result,
         "results": [result],
+        "cached": False,
     }
 
 
@@ -197,16 +225,35 @@ async def geocode_search(
     request: Request,
     q: str = Query(..., min_length=3, description="Address or place query"),
 ):
+    
+    key = geocode_cache_key(q)
+
+    with geocode_cache_lock:
+        cached = geocode_cache.get(key)
+
+    if cached is not None:
+        print(f"[CACHE HIT] geocode search: {q}") # DEBUG
+        return {
+            **cached,
+            "cached": True,
+        }
+    print(f"[CACHE MISS] geocode search: {q}") #DEBUG
+
     try:
         if GEOCODER_PROVIDER == "maptiler":
-            return await geocode_with_maptiler(q)
-        if GEOCODER_PROVIDER == "nominatim":
-            return await geocode_with_nominatim(q)
+            result = await geocode_with_maptiler(q)
+        elif GEOCODER_PROVIDER == "nominatim":
+            result = await geocode_with_nominatim(q)
+        else :
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unsupported geocoder provider: {GEOCODER_PROVIDER}",
+            )
+        with geocode_cache_lock:
+            geocode_cache[key] = result
 
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unsupported geocoder provider: {GEOCODER_PROVIDER}",
-        )
+        return result
+
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=502,
@@ -226,16 +273,35 @@ async def reverse_geocode(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
 ):
+    key = reverse_cache_key(lat, lon)
+
+    with reverse_cache_lock:
+        cached = reverse_cache.get(key)
+
+    if cached is not None:
+        print(f"[CACHE HIT] reverse: {lat}, {lon}") # DEBUG
+        return {
+            **cached,
+            "cached": True,
+        }
+    print(f"[CACHE MISS] reverse: {lat}, {lon}") # DEBUG
+
     try:
         if GEOCODER_PROVIDER == "maptiler":
-            return await reverse_with_maptiler(lat, lon)
-        if GEOCODER_PROVIDER == "nominatim":
-            return await reverse_with_nominatim(lat, lon)
+            result = await reverse_with_maptiler(lat, lon)
+        elif GEOCODER_PROVIDER == "nominatim":
+            result = await reverse_with_nominatim(lat, lon)
 
-        raise HTTPException(
+        else:
+            raise HTTPException(
             status_code=500,
             detail=f"Unsupported geocoder provider: {GEOCODER_PROVIDER}",
         )
+    
+        with reverse_cache_lock:
+            reverse_cache[key] = result
+
+        return result
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=502,
