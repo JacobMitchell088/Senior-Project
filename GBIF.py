@@ -15,7 +15,7 @@ if "OPENAI_API_KEY" not in os.environ:
 
 
 GBIF_OCC_SEARCH = "https://api.gbif.org/v1/occurrence/search"
-MAX_SPECIES = int(os.getenv("MAX_SPECIES_FOR_AI", 3)) # Highest amount of species that can be sent to our openAI call
+MAX_SPECIES = int(os.getenv("MAX_SPECIES_FOR_AI", 1)) # Highest amount of species that can be sent to our openAI call
 
 def miles_to_km(mi: float) -> float:
     return mi * 1.609344
@@ -80,7 +80,7 @@ def gbif_species_counts_in_area(lat: float, lon: float, radius_miles: float) -> 
         "limit": 0
     }
 
-    j = requests.get(GBIF_OCC_SEARCH, params=params, timeout=45).json()
+    j = requests.get(GBIF_OCC_SEARCH, params=params, timeout=120).json()
 
     counts = j.get("facets", [])[0].get("counts", [])
     return [(int(row["name"]), int(row["count"])) for row in counts if row.get("name")]
@@ -109,6 +109,11 @@ def run_scan(lat, lon, radius_miles, progress_callback=None):
 
     hits.sort(key=lambda x: x[1], reverse=True)
     hits = hits[:MAX_SPECIES]
+
+    print(MAX_SPECIES)
+    print("AI Context will be generated for the following species:")
+    for name, count, key in hits:
+        print(f" - {name} ({count} occurrences)")
 
     if progress_callback:
         progress_callback("Generating AI ecological context", 85)

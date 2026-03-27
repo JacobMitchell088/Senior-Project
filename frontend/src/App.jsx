@@ -261,16 +261,24 @@ function pollScanStatus(scanJobId) {
       setStepText(statusJson.step || "Processing...");
 
       if (statusJson.status === "complete") {
+        setProgress(100);
+        setStepText("Finalizing results...");
         clearInterval(interval);
-        setData(statusJson.result);
-        setLoading(false);
-        showToast("Environmental screen completed.", "success");
+
+        setTimeout(() => {
+          setData(statusJson.result);
+          setLoading(false);
+          showToast("Environmental screen completed.", "success");
+        }, 4000); // Small delay to ensure progress update is seen
+
+        return;
       }
 
       if (statusJson.status === "error") {
         clearInterval(interval);
         setGeneralError("Scan failed.");
         setLoading(false);
+        return;
       }
     } catch (err) {
       clearInterval(interval);
@@ -280,6 +288,7 @@ function pollScanStatus(scanJobId) {
   }, 1000); // Poll every 1 second
 }
 
+const lastPickedRef = useRef(null);
 async function handleAddressLookup() {
   try {
     setError((prev) => ({ ...prev, addressLookup: "" }));
@@ -483,8 +492,12 @@ async function handleSubmit(event) {
         duration: 7000,
         style: {
           borderRadius: "12px",
-          padding: "12px 16px",
-          fontSize: "14px",
+          padding: "20px 25px",
+          width: "auto",
+          maxWidth: "400px",
+          lineHeight: "1.3",
+          fontSize: "18px",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
         },
       }}
     />
@@ -593,6 +606,12 @@ async function handleSubmit(event) {
             </button>
 
             <div ref={turnstileRef} className="captcha-container"></div>
+            {loading && (
+            <div className="loading-box">
+              <div className="spinner"></div>
+              <p>Loading...</p>
+            </div>
+          )}
 
             {/* {error.environmentScan && (
               <div className="error">
@@ -626,31 +645,37 @@ async function handleSubmit(event) {
             </div>
           )} */}
 
-          {loading && (
-            <div className="loading-box">
-              <div className="spinner"></div>
-              <p>Processing environmental screening...</p>
-            </div>
-          )}
-
           { form.lat && form.lon && ( // !Object.values(error).some(Boolean) - Removes upon error
             <ScreeningMap
               lat={Number(form.lat)}
               lon={Number(form.lon)}
               radiusMiles={Number(form.radius_miles)}
+
+
               onPickLocation={async (lat, lon) => {
+                const roundedLat = Number(lat.toFixed(3));
+                const roundedLon = Number(lon.toFixed(3));
+
+                const newKey = `${roundedLat},${roundedLon}`;
+
+                if (lastPickedRef.current === newKey) {
+                  // If the rounded coordinates are the same as current, do nothing
+                  return;
+                }
+                lastPickedRef.current = newKey;
+
                 resetResults();
-                // 1. update coordinates immediately (fast UI response)
+                
                 setForm((prev) => ({
                   ...prev,
-                  lat: lat.toFixed(6),
-                  lon: lon.toFixed(6),
+                  lat: roundedLat,
+                  lon: roundedLon,
                 }));
 
                 try {
                   // 2. call your backend reverse geocode
                   const response = await fetch(
-                    `${backendUrl}/geocode/reverse?lat=${lat}&lon=${lon}`
+                    `${backendUrl}/geocode/reverse?lat=${roundedLat}&lon=${roundedLon}`
                   );
 
                   if (!response.ok) return;
@@ -664,8 +689,8 @@ async function handleSubmit(event) {
                   // 3. update address AFTER lookup completes
                   setForm((prev) => ({
                     ...prev,
-                    lat: lat.toFixed(6),
-                    lon: lon.toFixed(6),
+                    lat: roundedLat,
+                    lon: roundedLon,
                     address: best.label || prev.address,
                   }));
                 } catch (err) {
