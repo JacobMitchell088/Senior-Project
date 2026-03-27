@@ -14,7 +14,7 @@ router = APIRouter()
 
 GEOCODER_PROVIDER = os.getenv("GEOCODER_PROVIDER", "maptiler").lower()
 MAPTILER_API_KEY = os.getenv("MAPTILER_API_KEY", "")
-APP_USER_AGENT = os.getenv("APP_USER_AGENT", "environmental-screening-prototype/1.0")
+APP_USER_AGENT = os.getenv("APP_USER_AGENT", "EnvScreeningApp")
 
 
 # Cache settings
@@ -46,7 +46,7 @@ def geocode_cache_key(query: str) -> str:
 
 def reverse_cache_key(lat: float, lon: float) -> tuple[float, float]:
     # round a bit so tiny float differences don't miss cache
-    return (round(lat, 5), round(lon, 5))
+    return (round(lat, 3), round(lon, 3))
 
 async def geocode_with_maptiler(query: str) -> dict:
     if not MAPTILER_API_KEY:
