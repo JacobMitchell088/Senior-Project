@@ -444,6 +444,7 @@ function pushNotification(message, type = "error") {
 
 async function handleSubmit(event) {
     event.preventDefault();
+    lastToastRef.current = "";
     setError({ general: "", addressLookup: "", coordinateLookup: "", environmentScan: "" });
     setData({ gbif_hits: [], species_context: [] });
     setLoading(true);
