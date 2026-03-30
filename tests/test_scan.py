@@ -77,6 +77,17 @@ def reset_rate_limiter():
     limiter._storage.reset()
 
 
+def _wait_for_job(client, job_id: str, timeout: float = 5.0):
+    """Poll the status endpoint until the job leaves the 'queued'/'running' states."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        body = client.get(f"/scan/status/{job_id}").json()
+        if body["status"] not in ("queued", "running"):
+            return body
+        time.sleep(0.05)
+    raise TimeoutError(f"Job {job_id} did not complete within {timeout}s")
+
+
 def _make_job(age_seconds: float = 0, status: str = "complete") -> dict:
     """Build a job dict for direct insertion into the jobs store."""
     return {
@@ -581,7 +592,11 @@ class TestScanCaching:
         mocker.patch("scan.verify_turnstile", new=AsyncMock(return_value=True))
         mock_gbif = mocker.patch("GBIF.run_scan", return_value=_FAKE_SCAN_RESULT)
 
-        client.post("/scan/start", json=_VALID_SCAN_BODY)
+        resp = client.post("/scan/start", json=_VALID_SCAN_BODY)
+        job_id = resp.json()["job_id"]
+
+        # Wait for the background thread to finish before asserting.
+        _wait_for_job(client, job_id)
 
         mock_gbif.assert_called_once()
 
