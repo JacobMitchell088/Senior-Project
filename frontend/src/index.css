@@ -156,6 +156,37 @@ button:disabled {
   border: 1px dashed #cfe0d5;
 }
 
+.scan-meta {
+  font-size: 0.82rem;
+  color: #557369;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scan-meta-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.scan-meta-live {
+  background: #e6f4ea;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+
+.scan-meta-cached {
+  background: #fff8e1;
+  color: #856404;
+  border: 1px solid #ffe082;
+}
+
 .summary {
   display: flex;
   gap: 14px;
