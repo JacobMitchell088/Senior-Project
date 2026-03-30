@@ -11,8 +11,8 @@ const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || "";
 
 const initialForm = { // SIUE engineering building
   address: "Engineering Building, Southern Illinois University Edwardsville",
-  lat: "38.792170",
-  lon: "-90.001636",
+  lat: "38.792",
+  lon: "-90.002",
   radius_miles: "2"
 };
 
@@ -49,10 +49,13 @@ export default function App() {
     gbif_hits: [],
     species_context: []
   });
-  const [jobId, setJobId] = useState(null); 
+  const [jobId, setJobId] = useState(null);
   const [progress, setProgress] = useState(0);
   const [stepText, setStepText] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
+  const [lookingUpAddress, setLookingUpAddress] = useState(false);
+  const [lookingUpCoords, setLookingUpCoords] = useState(false);
+  const [scanMeta, setScanMeta] = useState(null);
 
   const [notifications, setNotifications] = useState([]);
 
@@ -268,9 +271,22 @@ function pollScanStatus(scanJobId) {
         clearInterval(interval);
 
         setTimeout(() => {
+          const isCached = statusJson.cached ?? false;
+          const scannedAt = statusJson.result?.scanned_at ?? null;
+
           setData(statusJson.result);
+          setScanMeta({ cached: isCached, scannedAt });
           setLoading(false);
-          showToast("Environmental screen completed.", "success");
+
+          const timeStr = scannedAt
+            ? new Date(scannedAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : null;
+
+          if (isCached) {
+            showToast(timeStr ? `Cached result · originally scanned at ${timeStr}` : "Cached result", "success");
+          } else {
+            showToast(timeStr ? `Live result · scanned at ${timeStr}` : "Scan complete", "success");
+          }
         }, 4000); // Small delay to ensure progress update is seen
 
         return;
@@ -292,6 +308,7 @@ function pollScanStatus(scanJobId) {
 
 const lastPickedRef = useRef(null);
 async function handleAddressLookup() {
+  setLookingUpAddress(true);
   try {
     setError((prev) => ({ ...prev, addressLookup: "" }));
 
@@ -316,24 +333,25 @@ async function handleAddressLookup() {
     setForm((prev) => ({
       ...prev,
       address: best.label || prev.address,
-      lat: String(best.lat),
-      lon: String(best.lon),
+      lat: parseFloat(best.lat).toFixed(3),
+      lon: parseFloat(best.lon).toFixed(3),
     }));
     resetResults();
-    // later:
-    // update map center / marker here
+    showToast(`Address found · ${parseFloat(best.lat).toFixed(3)}, ${parseFloat(best.lon).toFixed(3)}`, "success");
   } catch (err) {
-      if (err.message !== "Rate limited") {
+    if (err.message !== "Rate limited") {
       setError((prev) => ({
         ...prev,
         addressLookup: err.message,
       }));
     }
-    //showToast("Error occurred while looking up address.", "error");
+  } finally {
+    setLookingUpAddress(false);
   }
 }
 
 async function handleCoordinateLookup() {
+  setLookingUpCoords(true);
   try {
     setError((prev) => ({ ...prev, coordinateLookup: "" }));
 
@@ -361,21 +379,20 @@ async function handleCoordinateLookup() {
     setForm((prev) => ({
       ...prev,
       address: best.label || prev.address,
-      lat: String(best.lat),
-      lon: String(best.lon),
+      lat: parseFloat(best.lat).toFixed(3),
+      lon: parseFloat(best.lon).toFixed(3),
     }));
     resetResults();
-
-    // later:
-    // update map center / marker here
+    showToast(`Address found · ${best.label}`, "success");
   } catch (err) {
-      if (err.message !== "Rate limited") {
-        setError((prev) => ({
-          ...prev,
-          coordinateLookup: err.message,
-        }));
-      }
-      //showToast("Error occurred while looking up coordinates.", "error");
+    if (err.message !== "Rate limited") {
+      setError((prev) => ({
+        ...prev,
+        coordinateLookup: err.message,
+      }));
+    }
+  } finally {
+    setLookingUpCoords(false);
   }
 }
 
@@ -389,6 +406,18 @@ function resetResults() {
   setJobId(null);
   setProgress(0);
   setStepText("");
+  setScanMeta({ cached: false, scannedAt: null });
+}
+
+function timeAgo(unixTimestamp) {
+  const seconds = Math.floor(Date.now() / 1000 - unixTimestamp);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days !== 1 ? "s" : ""} ago`;
 }
 
 function showToast(message, type = "error") {
@@ -545,15 +574,17 @@ async function handleSubmit(event) {
                   onChange={updateField}
                   placeholder="123 Main St, Edwardsville, IL"
                 />
-                <button type="button" className="btn-secondary" onClick={handleAddressLookup} disabled={cooldowns.addressLookup > 0}>
-                  {cooldowns.addressLookup > 0
+                <button type="button" className="btn-secondary" onClick={handleAddressLookup} disabled={cooldowns.addressLookup > 0 || lookingUpAddress}>
+                  {lookingUpAddress
+                    ? "Looking up..."
+                    : cooldowns.addressLookup > 0
                     ? `Try again in ${formatCooldown(cooldowns.addressLookup)}`
                     : "Find Address"}
                 </button>
 
                 {(form.lat && form.lon) && (
                   <div className="lookup-preview">
-                    <small>Matched coordinates: {parseFloat(form.lat).toFixed(4)}, {parseFloat(form.lon).toFixed(4)}</small>
+                    <small>Matched coordinates: {parseFloat(form.lat).toFixed(3)}, {parseFloat(form.lon).toFixed(3)}</small>
                   </div>
                 )}
               </>
@@ -575,8 +606,10 @@ async function handleSubmit(event) {
                   placeholder="-87.6298"
                 />
 
-                <button type="button" className="btn-secondary" onClick={handleCoordinateLookup} disabled={cooldowns.coordinateLookup > 0}>
-                  {cooldowns.coordinateLookup > 0
+                <button type="button" className="btn-secondary" onClick={handleCoordinateLookup} disabled={cooldowns.coordinateLookup > 0 || lookingUpCoords}>
+                  {lookingUpCoords
+                    ? "Looking up..."
+                    : cooldowns.coordinateLookup > 0
                     ? `Try again in ${formatCooldown(cooldowns.coordinateLookup)}`
                     : "Find Address From Coordinates"}
                 </button>
@@ -729,6 +762,8 @@ async function handleSubmit(event) {
               </div>
             </div>
           )}
+
+            
 
           {!loading && data && hasScanned && (
             <>

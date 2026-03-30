@@ -91,6 +91,8 @@ def run_scan_job(job_id: str, lat: float, lon: float, radius_miles: float):
             progress_callback=progress_callback,
         )
 
+        result["scanned_at"] = time.time()
+
         jobs[job_id]["status"] = "complete"
         jobs[job_id]["step"] = "Complete"
         jobs[job_id]["progress"] = 100
