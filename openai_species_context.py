@@ -58,10 +58,11 @@ Flagged species:
 For EACH species, provide:
 1. scientific_name
 2. common_name (the widely-used English common name for this species)
-3. a short paragraph of practical construction-planning context
-4. likely important seasonal considerations such as breeding, nesting, migration, roosting, dormancy, or spawning if relevant
-5. likely disruptive construction activities such as noise, tree clearing, grading, vibration, water disturbance, or nighttime lighting
-6. a cautious recommendation for when construction may be less disruptive, if reasonable
+3. tags: a compact list of 2–6 short keyword labels (1–3 words each) summarizing the most relevant concerns for this species — draw from seasonal sensitivities (e.g. "Nesting", "Breeding Season", "Migration", "Overwintering", "Spawning", "Dormancy") and disruptive activities (e.g. "Tree Clearing", "Ground Disturbance", "Vibration", "Noise", "Water Disturbance", "Night Lighting"). Only include tags that genuinely apply.
+4. overview: 1–2 sentences of general background relevant to construction planning for this species
+5. seasonal_concerns: a short paragraph on the most relevant seasonal sensitivities (breeding, nesting, migration, roosting, dormancy, spawning, etc.) and approximately when they occur
+6. disruptive_activities: a short paragraph on which construction activities are most likely to cause disturbance (noise, tree clearing, grading, vibration, water disturbance, nighttime lighting, etc.)
+7. recommendation: a cautious 1–2 sentence suggestion for when or how construction might be less disruptive, if reasonable — do not frame this as approval or a guarantee
 
 Important rules:
 - Do not invent legal requirements
@@ -76,7 +77,11 @@ Return ONLY valid JSON in this exact format:
     {{
       "scientific_name": "Species name here",
       "common_name": "Common name here",
-      "analysis": "One paragraph here"
+      "tags": ["Tag One", "Tag Two"],
+      "overview": "Brief general context here.",
+      "seasonal_concerns": "Seasonal sensitivity paragraph here.",
+      "disruptive_activities": "Disruptive activities paragraph here.",
+      "recommendation": "Cautious timing suggestion here."
     }}
   ]
 }}
