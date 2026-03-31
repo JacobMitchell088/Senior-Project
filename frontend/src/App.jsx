@@ -849,10 +849,11 @@ function downloadReport(scanData, meta, formValues) {
 
           {loading && (() => {
             const SCAN_STEPS = [
+              { label: "Validating Human", threshold: 1 },
               { label: "Loading taxon lookup", threshold: 10 },
               { label: "Querying GBIF species", threshold: 35 },
               { label: "Cross-referencing endangered species", threshold: 60 },
-              { label: "Generating AI ecological context", threshold: 85 },
+              { label: "Generating AI ecological context", threshold: 86 },
               { label: "Finalizing results", threshold: 100 },
             ];
             return (

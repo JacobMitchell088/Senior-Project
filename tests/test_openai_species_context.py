@@ -424,3 +424,148 @@ class TestEnrichGbifResults:
             _ONE_SPECIES, client=_make_client(partial_json)
         )
         assert result["species_context"][0]["scientific_name"] == "Myotis sodalis"
+
+
+# ---------------------------------------------------------------------------
+# 3. enrich_gbif_results_with_openai_batch() — OpenAI API error handling
+# ---------------------------------------------------------------------------
+
+def _make_raising_client(exception: Exception) -> MagicMock:
+    """Build a mock OpenAI client whose responses.create() raises the given exception."""
+    mock_client = MagicMock()
+    mock_client.responses.create.side_effect = exception
+    return mock_client
+
+
+class TestEnrichGbifResultsApiErrors:
+    """
+    Verify that every OpenAI API failure mode returns a gracefully-degraded
+    result rather than propagating an exception to the caller.
+    """
+
+    # -- AuthenticationError: invalid / missing API key --
+
+    def test_auth_error_does_not_raise(self):
+        from openai import AuthenticationError
+        client = _make_raising_client(AuthenticationError("invalid key", response=MagicMock(), body={}))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "species_context" in result
+
+    def test_auth_error_returns_one_entry_per_hit(self):
+        from openai import AuthenticationError
+        client = _make_raising_client(AuthenticationError("invalid key", response=MagicMock(), body={}))
+        result = enrich_gbif_results_with_openai_batch(_TWO_SPECIES, client=client)
+        assert len(result["species_context"]) == 2
+
+    def test_auth_error_entry_preserves_scientific_name(self):
+        from openai import AuthenticationError
+        client = _make_raising_client(AuthenticationError("invalid key", response=MagicMock(), body={}))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert result["species_context"][0]["scientific_name"] == "Myotis sodalis"
+
+    def test_auth_error_sets_ai_error_field(self):
+        from openai import AuthenticationError
+        client = _make_raising_client(AuthenticationError("invalid key", response=MagicMock(), body={}))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "ai_error" in result
+        assert len(result["ai_error"]) > 0
+
+    def test_auth_error_still_returns_disclaimer(self):
+        from openai import AuthenticationError
+        client = _make_raising_client(AuthenticationError("invalid key", response=MagicMock(), body={}))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "disclaimer" in result
+
+    # -- RateLimitError: quota exhausted --
+
+    def test_rate_limit_error_does_not_raise(self):
+        from openai import RateLimitError
+        client = _make_raising_client(RateLimitError("quota exceeded", response=MagicMock(), body={}))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "species_context" in result
+
+    def test_rate_limit_error_message_mentions_quota(self):
+        from openai import RateLimitError
+        client = _make_raising_client(RateLimitError("quota exceeded", response=MagicMock(), body={}))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "quota" in result["ai_error"].lower()
+
+    def test_rate_limit_error_returns_one_entry_per_hit(self):
+        from openai import RateLimitError
+        client = _make_raising_client(RateLimitError("quota exceeded", response=MagicMock(), body={}))
+        result = enrich_gbif_results_with_openai_batch(_TWO_SPECIES, client=client)
+        assert len(result["species_context"]) == 2
+
+    # -- APITimeoutError: request timed out --
+
+    def test_timeout_error_does_not_raise(self):
+        from openai import APITimeoutError
+        client = _make_raising_client(APITimeoutError(request=MagicMock()))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "species_context" in result
+
+    def test_timeout_error_message_mentions_timeout(self):
+        from openai import APITimeoutError
+        client = _make_raising_client(APITimeoutError(request=MagicMock()))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "timed out" in result["ai_error"].lower()
+
+    # -- APIConnectionError: network unreachable --
+
+    def test_connection_error_does_not_raise(self):
+        from openai import APIConnectionError
+        client = _make_raising_client(APIConnectionError(request=MagicMock()))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "species_context" in result
+
+    def test_connection_error_message_mentions_connectivity(self):
+        from openai import APIConnectionError
+        client = _make_raising_client(APIConnectionError(request=MagicMock()))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "connect" in result["ai_error"].lower() or "network" in result["ai_error"].lower()
+
+    # -- APIStatusError: unexpected HTTP status from OpenAI --
+
+    def test_api_status_error_does_not_raise(self):
+        from openai import APIStatusError
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        client = _make_raising_client(APIStatusError("server error", response=mock_response, body={}))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "species_context" in result
+
+    def test_api_status_error_message_mentions_status_code(self):
+        from openai import APIStatusError
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        client = _make_raising_client(APIStatusError("server error", response=mock_response, body={}))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert "500" in result["ai_error"]
+
+    def test_api_status_error_returns_entry_per_hit(self):
+        from openai import APIStatusError
+        mock_response = MagicMock()
+        mock_response.status_code = 503
+        client = _make_raising_client(APIStatusError("unavailable", response=mock_response, body={}))
+        result = enrich_gbif_results_with_openai_batch(_TWO_SPECIES, client=client)
+        assert len(result["species_context"]) == 2
+
+    # -- All error paths: degraded entries have empty tags and null sub-fields --
+
+    def test_degraded_entry_has_empty_tags(self):
+        from openai import RateLimitError
+        client = _make_raising_client(RateLimitError("quota exceeded", response=MagicMock(), body={}))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert result["species_context"][0]["tags"] == []
+
+    def test_degraded_entry_has_null_overview(self):
+        from openai import APIConnectionError
+        client = _make_raising_client(APIConnectionError(request=MagicMock()))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert result["species_context"][0]["overview"] is None
+
+    def test_degraded_entry_has_ai_error_field(self):
+        from openai import APITimeoutError
+        client = _make_raising_client(APITimeoutError(request=MagicMock()))
+        result = enrich_gbif_results_with_openai_batch(_ONE_SPECIES, client=client)
+        assert result["species_context"][0]["ai_error"] is not None
