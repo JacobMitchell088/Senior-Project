@@ -1,35 +1,34 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+import logging
 import os
 
-jobs = {}
-
-
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
+
 from limiter import limiter
 from scan import router as scan_router
 from geocode import router as geocode_router
 
 load_dotenv()
 
-TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SECRET_KEY", "")
-FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
-jobs = {}
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 
 app = FastAPI(
     title="Environmental Screening API",
     description="Environmental screening for endangered species near construction sites",
-    version="1.1"
+    version="1.1",
 )
 
-# Allow frontend requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_ORIGIN],
@@ -38,16 +37,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_server_error", "message": "An unexpected error occurred. Please try again."},
+    )
+
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     return JSONResponse(
         status_code=429,
-        content={"detail": "Rate limit exceeded. Please try again later."}
+        content={
+            "error": "rate_limit_exceeded",
+            "message": "Too many requests. Please try again later.",
+            "retry_after": 3600,
+        },
     )
+
 
 @app.get("/")
 def root():
@@ -62,7 +75,5 @@ def health():
     return {"status": "ok"}
 
 
-# Routers
 app.include_router(scan_router, tags=["scan"])
 app.include_router(geocode_router, prefix="/geocode", tags=["geocode"])
-

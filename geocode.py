@@ -1,3 +1,4 @@
+import logging
 import os
 from urllib.parse import quote
 
@@ -5,14 +6,20 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Query, Request
 from limiter import limiter
+import redis_client
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 GEOCODER_PROVIDER = os.getenv("GEOCODER_PROVIDER", "maptiler").lower()
 MAPTILER_API_KEY = os.getenv("MAPTILER_API_KEY", "")
-APP_USER_AGENT = os.getenv("APP_USER_AGENT", "environmental-screening-prototype/1.0")
+APP_USER_AGENT = os.getenv("APP_USER_AGENT", "EnvScreeningApp")
+
+GEOCODE_CACHE_TTL_SECONDS = 86400   # 24 hours
+REVERSE_CACHE_TTL_SECONDS = 86400
 
 
 def normalize_result(label: str, lat: float, lon: float, bbox=None, raw=None):
@@ -24,6 +31,12 @@ def normalize_result(label: str, lat: float, lon: float, bbox=None, raw=None):
         "raw": raw,
     }
 
+def geocode_cache_key(query: str) -> str:
+    return query.strip().lower()
+
+def reverse_cache_key(lat: float, lon: float) -> str:
+    # Round to 3 decimal places so tiny float differences share the same entry
+    return f"{round(lat, 3)}:{round(lon, 3)}"
 
 async def geocode_with_maptiler(query: str) -> dict:
     if not MAPTILER_API_KEY:
@@ -36,7 +49,7 @@ async def geocode_with_maptiler(query: str) -> dict:
         "limit": 5,
         "country": "us",
     }
-
+    logger.info("MAPTILER geocode call: %s", query)
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
@@ -79,7 +92,7 @@ async def reverse_with_maptiler(lat: float, lon: float) -> dict:
         "key": MAPTILER_API_KEY,
         "limit": 1,
     }
-
+    logger.info("MAPTILER reverse call: %.3f, %.3f", lat, lon)
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
@@ -92,6 +105,7 @@ async def reverse_with_maptiler(lat: float, lon: float) -> dict:
             "count": 0,
             "best_match": None,
             "results": [],
+            "cached": False,
         }
 
     feature = features[0]
@@ -110,6 +124,7 @@ async def reverse_with_maptiler(lat: float, lon: float) -> dict:
         "count": 1,
         "best_match": result,
         "results": [result],
+        "cached": False,
     }
 
 
@@ -124,7 +139,7 @@ async def geocode_with_nominatim(query: str) -> dict:
     headers = {
         "User-Agent": APP_USER_AGENT,
     }
-
+    logger.info("NOMINATIM geocode call: %s", query)
     async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
@@ -148,6 +163,7 @@ async def geocode_with_nominatim(query: str) -> dict:
         "count": len(results),
         "best_match": results[0] if results else None,
         "results": results,
+        "cached": False,
     }
 
 
@@ -161,7 +177,7 @@ async def reverse_with_nominatim(lat: float, lon: float) -> dict:
     headers = {
         "User-Agent": APP_USER_AGENT,
     }
-
+    logger.info("NOMINATIM reverse call: %.3f, %.3f", lat, lon)
     async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()
@@ -173,6 +189,7 @@ async def reverse_with_nominatim(lat: float, lon: float) -> dict:
             "count": 0,
             "best_match": None,
             "results": [],
+            "cached": False,
         }
 
     result = normalize_result(
@@ -188,25 +205,39 @@ async def reverse_with_nominatim(lat: float, lon: float) -> dict:
         "count": 1,
         "best_match": result,
         "results": [result],
+        "cached": False,
     }
 
 
 @router.get("/search")
-@limiter.limit("50/minute")
+@limiter.limit("3/minute")
 async def geocode_search(
     request: Request,
     q: str = Query(..., min_length=3, description="Address or place query"),
 ):
+    key = geocode_cache_key(q)
+    redis_key = f"geocode:{key}"
+
+    cached = redis_client.cache_get(redis_key)
+    if cached is not None:
+        logger.info("GEOCODE CACHE HIT: %s", q)
+        return {**cached, "cached": True}
+    logger.info("GEOCODE CACHE MISS: %s", q)
+
     try:
         if GEOCODER_PROVIDER == "maptiler":
-            return await geocode_with_maptiler(q)
-        if GEOCODER_PROVIDER == "nominatim":
-            return await geocode_with_nominatim(q)
+            result = await geocode_with_maptiler(q)
+        elif GEOCODER_PROVIDER == "nominatim":
+            result = await geocode_with_nominatim(q)
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unsupported geocoder provider: {GEOCODER_PROVIDER}",
+            )
 
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unsupported geocoder provider: {GEOCODER_PROVIDER}",
-        )
+        redis_client.cache_set(redis_key, result, GEOCODE_CACHE_TTL_SECONDS)
+        return result
+
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=502,
@@ -220,22 +251,34 @@ async def geocode_search(
 
 
 @router.get("/reverse")
-@limiter.limit("50/minute")
+@limiter.limit("3/minute")
 async def reverse_geocode(
     request: Request,
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
 ):
+    redis_key = f"reverse:{reverse_cache_key(lat, lon)}"
+
+    cached = redis_client.cache_get(redis_key)
+    if cached is not None:
+        logger.info("REVERSE CACHE HIT: %.3f, %.3f", lat, lon)
+        return {**cached, "cached": True}
+    logger.info("REVERSE CACHE MISS: %.3f, %.3f", lat, lon)
+
     try:
         if GEOCODER_PROVIDER == "maptiler":
-            return await reverse_with_maptiler(lat, lon)
-        if GEOCODER_PROVIDER == "nominatim":
-            return await reverse_with_nominatim(lat, lon)
+            result = await reverse_with_maptiler(lat, lon)
+        elif GEOCODER_PROVIDER == "nominatim":
+            result = await reverse_with_nominatim(lat, lon)
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unsupported geocoder provider: {GEOCODER_PROVIDER}",
+            )
 
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unsupported geocoder provider: {GEOCODER_PROVIDER}",
-        )
+        redis_client.cache_set(redis_key, result, REVERSE_CACHE_TTL_SECONDS)
+        return result
+
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=502,

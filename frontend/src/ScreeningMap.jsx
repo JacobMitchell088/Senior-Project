@@ -1,6 +1,6 @@
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 
 // Fix default marker icons for Vite/React
@@ -8,12 +8,23 @@ import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
+const MAPTILER_API_KEY = import.meta.env.VITE_MAPTILER_API_KEY || "";
+
+if (!MAPTILER_API_KEY) {
+  console.error("Missing VITE_MAPTILER_API_KEY");
+}
+
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
   iconUrl: markerIcon,
   shadowUrl: markerShadow,
 });
+
+const ILLINOIS_BOUNDS = [
+  [36.95, -91.60],
+  [42.55, -87.45],
+];
 
 function FlyToLocation({ lat, lon }) {
   const map = useMap();
@@ -59,9 +70,17 @@ function ZoomToRadius({ radiusMiles }) {
 }
 
 function MapClickHandler({ onPickLocation }) {
+  const clickTimeoutRef = useRef(null);
+
   useMapEvents({
     click(e) {
-      onPickLocation(e.latlng.lat, e.latlng.lng);
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+
+      clickTimeoutRef.current = setTimeout(() => {
+        onPickLocation(e.latlng.lat, e.latlng.lng);
+      }, 300); // Delay to distinguish single click from double click
     },
   });
 
@@ -85,13 +104,23 @@ export default function ScreeningMap({
     <div className="map-shell">
       <MapContainer
         center={center}
-        zoom={13}
-        scrollWheelZoom={true}
+        zoom={10}
+        minZoom={6}
+        maxZoom={17}
+        maxBounds={ILLINOIS_BOUNDS}
+        maxBoundsViscosity={1.0}
+        scrollWheelZoom={false}
+        dragging={true}
+
         className="screening-map"
       >
         <TileLayer
-          attribution='&copy; OpenStreetMap contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='Map tiles by MapTiler · Data © OpenStreetMap contributors'
+          url={`https://api.maptiler.com/maps/base-v4/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`}
+          tileSize={512}
+          zoomOffset={-1}
+          
+          keepBuffer={2}
         />
 
         <FlyToLocation lat={latNum} lon={lonNum} />
